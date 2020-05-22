@@ -15,7 +15,7 @@ module i2c_controller(
 		input write_enable,
 		
 		// to read the received data
-		output [7:0] data_out,
+		output reg [7:0] data_out,
 		input read_enable,
 		
 		// set the corresponding bits to specify whether to send ack or send nack
@@ -25,7 +25,7 @@ module i2c_controller(
 		
 		// connect the following i2c lines to the slave device
 		inout i2c_sda,
-		inout i2c_sck,
+		inout i2c_scl,
 		
 		// data_in, write_enable and the data_out, read_enable can be probed only when the byte_io_complete is set
 		output reg byte_io_complete,
@@ -39,7 +39,10 @@ module i2c_controller(
 		// if the module has an on going connection with an i2c slave device
 		output reg communication_ongoing,
 		
-		output reg bus_busy
+		output reg controller_idle,
+		
+		output reg [31:0] i2c_clock_counter,
+		output reg [2:0] i2c_state
     );
 	
 	reg [6:0] slave_addr;
@@ -53,8 +56,8 @@ module i2c_controller(
 	reg sda_en;
 	reg scl_en;
 	
-	assign i2c_sda = sda_en ? 0 : 1'bz;
-	assign i2c_scl = scl_en ? 0 : 1'bz;
+	assign i2c_sda = sda_en ? 1'bz : 0;
+	assign i2c_scl = scl_en ? 1'bz : 0;
 	
 	parameter sys_clk = 50000000;
 	parameter i2c_frequency = 400 * 1000;
@@ -75,7 +78,7 @@ module i2c_controller(
 	parameter i2c_half_low_and_high_time_count =  i2c_half_low_time + i2c_high_time - 1;
 	parameter i2c_half_low_and_high_and_half_low_time_count = i2c_low_time + i2c_high_time - 1;
 	
-	reg i2c_state;
+	//reg [2:0] i2c_state;
 	
 	parameter IDLE						= 3'b000;
 	parameter START					= 3'b001;
@@ -86,7 +89,7 @@ module i2c_controller(
 	parameter RECEIVE_ACK_NACK		= 3'b110;
 	parameter SEND_STOP				= 3'b111;
 	
-	integer i2c_clock_counter;
+	//integer i2c_clock_counter;
 	
 	always@(posedge clk) begin
 		if(reset) begin
@@ -95,6 +98,8 @@ module i2c_controller(
 			scl_en <= 1;
 			i2c_clock_counter <= 0;
 			communication_ongoing <= 0;
+			slave_ack_received <= 0;
+			slave_nack_received <= 0;
 		end
 		else begin
 			case(i2c_state)
@@ -103,9 +108,15 @@ module i2c_controller(
 					begin
 						if(!communication_ongoing) begin
 							if(send_start) begin
+								controller_idle <= 0;
+								
 								// for a start condition to bigin, sda and scl must both be high
 								sda_en <= 1;
 								scl_en <= 1;
+								
+								// reset ack and nack for the next cycle
+								slave_ack_received <= 0;
+								slave_nack_received <= 0;
 								
 								// reset the i2c clock counter
 								i2c_clock_counter <= 0;
@@ -121,9 +132,13 @@ module i2c_controller(
 								slave_addr <= addr_in;
 								slave_R_Wbar <= R_Wbar;
 							end
+							else
+								controller_idle <= 1;
 						end
 						else if(communication_ongoing) begin
 							if(send_stop && !send_ack && !send_nack) begin
+								controller_idle <= 0;
+								
 								// reset counter
 								i2c_clock_counter <= 0;
 								
@@ -136,6 +151,8 @@ module i2c_controller(
 							end
 							// you may send ack or nack only if you are receiving from the i2c slave device
 							else if(!send_stop && send_ack && !send_nack && slave_R_Wbar) begin
+								controller_idle <= 0;
+								
 								// reset counter
 								i2c_clock_counter <= 0;
 								
@@ -145,6 +162,8 @@ module i2c_controller(
 								sda_en <= 0;
 							end
 							else if(!send_stop && !send_ack && send_nack && slave_R_Wbar) begin
+								controller_idle <= 0;
+								
 								// reset counter
 								i2c_clock_counter <= 0;
 								
@@ -153,6 +172,8 @@ module i2c_controller(
 								
 								sda_en <= 1;
 							end
+							else
+								controller_idle <= 1;
 						end
 					end
 
@@ -161,10 +182,14 @@ module i2c_controller(
 						if(i2c_clock_counter == i2c_half_high_time_count) begin
 							// bring sda low after half high time
 							sda_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_high_time_count) begin
 							// bring scl low after high time
 							scl_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_high_and_half_low_time_count) begin
 							// reset the clock counter
@@ -175,7 +200,7 @@ module i2c_controller(
 							
 							// start with sending the 7th bit
 							bit_addr <= 7;
-							sda_en <= {slave_addr, slave_R_Wbar}[7];
+							sda_en <= slave_addr[6];
 							
 							// set state to send a byte
 							i2c_state <= SEND_BYTE;
@@ -189,10 +214,14 @@ module i2c_controller(
 						if(i2c_clock_counter == i2c_half_low_time_count) begin
 							// bring clock high
 							scl_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
 							// then bring clock low
 							scl_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
 							// the last bit was send perfectly fine
@@ -213,7 +242,7 @@ module i2c_controller(
 								bit_addr <= bit_addr - 1;
 								
 								// set the sda line to send the corresponding bit
-								sda_en <= slave_addr[bit_addr - 1];
+								sda_en <= data_tx_buff[bit_addr - 1];
 							end
 						end
 						else
@@ -226,15 +255,21 @@ module i2c_controller(
 							// bring clock high, now bit on sda has been latched,
 							// but we will read it only in the middle of the high pulse of the scl
 							scl_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_half_high_time_count) begin
 							// middle of scl high pulse, is reached, read the bit
 							data_rx_buff[bit_addr] <= i2c_sda;
 							bit_addr <= bit_addr - 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
 							// clock high pulse is complete
 							scl_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
 							// bit has been read
@@ -256,10 +291,14 @@ module i2c_controller(
 						if(i2c_clock_counter == i2c_half_low_time_count) begin
 							// bring clock high
 							scl_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
 							// then bring clock low
 							scl_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
 							// the ack/nack bit was send perfectly fine
@@ -291,6 +330,8 @@ module i2c_controller(
 							// bring clock high, now ack or nack bit on sda has been latched,
 							// but we will read it only in the middle of the high pulse of the scl
 							scl_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_half_high_time_count) begin
 							// middle of scl high pulse, is reached, read the bit
@@ -303,10 +344,14 @@ module i2c_controller(
 								slave_nack_received <= 0;
 								slave_ack_received <= 1;
 							end
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
 							// clock high pulse is complete
 							scl_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
 							// ack nack bit has been read
@@ -327,10 +372,14 @@ module i2c_controller(
 						if(i2c_clock_counter == i2c_half_low_time_count) begin
 							// set scl high
 							scl_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_half_high_time_count) begin
 							// then set sda high
 							sda_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
 						end
 						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
 							// stop byte has been sent, the communication is now not ongoing
