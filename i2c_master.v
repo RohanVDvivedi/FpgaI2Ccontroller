@@ -141,6 +141,8 @@ module i2c_controller(
 								
 								// set state to send an ack
 								i2c_state <= SEND_ACK;
+								
+								sda_en <= 0;
 							end
 							else if(!send_stop && !send_ack && send_nack && slave_R_Wbar) begin
 								// reset counter
@@ -148,6 +150,8 @@ module i2c_controller(
 								
 								// set state to send a nack
 								i2c_state <= SEND_NACK;
+								
+								sda_en <= 1;
 							end
 						end
 					end
@@ -218,10 +222,67 @@ module i2c_controller(
 
 				RECEIVE_BYTE :
 					begin
+						if(i2c_clock_counter == i2c_half_low_time_count) begin
+							// bring clock high, now bit on sda has been latched,
+							// but we will read it only in the middle of the high pulse of the scl
+							scl_en <= 1;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_half_high_time_count) begin
+							// middle of scl high pulse, is reached, read the bit
+							data_rx_buff[bit_addr] <= i2c_sda;
+							bit_addr <= bit_addr - 1;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
+							// clock high pulse is complete
+							scl_en <= 0;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
+							// bit has been read
+							
+							// reset the counter
+							i2c_clock_counter <= 0;
+							
+							if(bit_addr == 7) begin
+								// go to idle state, wait until, we receive ack/nack to send, or to send a stop bit
+								i2c_state <= IDLE;
+							end
+						end
+						else
+							i2c_clock_counter <= i2c_clock_counter + 1;
 					end
 					
 				3'b10x : //SEND_ACK or SEND_NACK :
 					begin
+						if(i2c_clock_counter == i2c_half_low_time_count) begin
+							// bring clock high
+							scl_en <= 1;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
+							// then bring clock low
+							scl_en <= 0;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
+							// the ack/nack bit was send perfectly fine
+							
+							// reset clock counter
+							i2c_clock_counter <= 0;
+							
+							// sending ack-nack directly transitions to 
+							if(i2c_state == SEND_ACK) begin
+								// if acked, we get another byte from the device
+								bit_addr <= 7;
+								i2c_state <= RECEIVE_BYTE;
+							end
+							else begin
+								// else we send stop bit on the line
+								i2c_state <= SEND_STOP;
+								
+								sda_en <= 0;
+								scl_en <= 0;
+							end
+						end
+						else
+							i2c_clock_counter <= i2c_clock_counter + 1;
 					end
 					
 				RECEIVE_ACK_NACK :
