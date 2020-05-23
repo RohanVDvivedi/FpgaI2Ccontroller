@@ -20,7 +20,7 @@ module i2c_controller(
 		
 		// set the corresponding bits to specify whether to send ack or send nack
 		input send_ack,
-		input send_nack, // sending a nack will also send stop bit, when in receiver mode
+		input send_nack,
 		input send_stop,
 		
 		// connect the following i2c lines to the slave device
@@ -100,40 +100,37 @@ module i2c_controller(
 			communication_ongoing <= 0;
 			slave_ack_received <= 0;
 			slave_nack_received <= 0;
+			controller_idle <= 1;
 		end
 		else begin
 			case(i2c_state)
 			
 				IDLE : 
 					begin
-						if(!communication_ongoing) begin
-							if(send_start) begin
-								controller_idle <= 0;
+						if(send_start) begin
+							controller_idle <= 0;
 								
-								// for a start condition to bigin, sda and scl must both be high
-								sda_en <= 1;
-								scl_en <= 1;
+							// for a start condition to bigin, sda and scl must both be high
+							sda_en <= 1;
+							scl_en <= 1;
 								
-								// reset ack and nack for the next cycle
-								slave_ack_received <= 0;
-								slave_nack_received <= 0;
+							// reset ack and nack for the next cycle
+							slave_ack_received <= 0;
+							slave_nack_received <= 0;
 								
-								// reset the i2c clock counter
-								i2c_clock_counter <= 0;
+							// reset the i2c clock counter
+							i2c_clock_counter <= 0;
 								
-								// set the next state as START
-								i2c_state <= START;
+							// set the next state as START
+							i2c_state <= START;
 								
-								// mark the communication as ongoing
-								communication_ongoing <= 1;
+							// mark the communication as ongoing
+							communication_ongoing <= 1;
 								
-								// setup slave address and the Read/Write bar for future reference
-								// until the current ongoing communication ends
-								slave_addr <= addr_in;
-								slave_R_Wbar <= R_Wbar;
-							end
-							else
-								controller_idle <= 1;
+							// setup slave address and the Read/Write bar for future reference
+							// until the current ongoing communication ends
+							slave_addr <= addr_in;
+							slave_R_Wbar <= R_Wbar;
 						end
 						else if(communication_ongoing) begin
 							if(send_stop && !send_ack && !send_nack) begin
@@ -160,6 +157,8 @@ module i2c_controller(
 								i2c_state <= SEND_ACK;
 								
 								sda_en <= 0;
+								
+								byte_io_complete <= 0;
 							end
 							else if(!send_stop && !send_ack && send_nack && slave_R_Wbar) begin
 								controller_idle <= 0;
@@ -172,8 +171,37 @@ module i2c_controller(
 								
 								sda_en <= 1;
 							end
-							else
+							else if(write_enable && !slave_R_Wbar) begin
+								controller_idle <= 0;
+								
+								// reset the i2c clock counter
+								i2c_clock_counter <= 0;
+								
+								data_tx_buff <= data_in;
+								
+								i2c_state <= SEND_BYTE;
+								
+								bit_addr <= 7;
+								
+								sda_en <= data_in[7];
+								scl_en <= 0;
+							end
+							else if(read_enable && slave_R_Wbar) begin
 								controller_idle <= 1;
+								
+								// reset the i2c clock counter
+								i2c_clock_counter <= 0;
+								
+								// reset ack and nack for the next cycle
+								slave_ack_received <= 0;
+								slave_nack_received <= 0;
+							end
+							else begin
+								controller_idle <= 1;
+							end
+						end
+						else begin
+							controller_idle <= 1;
 						end
 					end
 
@@ -205,8 +233,9 @@ module i2c_controller(
 							// set state to send a byte
 							i2c_state <= SEND_BYTE;
 						end
-						else
+						else begin
 							i2c_clock_counter <= i2c_clock_counter + 1;
+						end
 					end
 
 				SEND_BYTE :
@@ -278,6 +307,8 @@ module i2c_controller(
 							i2c_clock_counter <= 0;
 							
 							if(bit_addr == 7) begin
+								data_out <= data_rx_buff;
+
 								// go to idle state, wait until, we receive ack/nack to send, or to send a stop bit
 								i2c_state <= IDLE;
 							end
@@ -286,8 +317,9 @@ module i2c_controller(
 							i2c_clock_counter <= i2c_clock_counter + 1;
 					end
 					
-				3'b10x : //SEND_ACK or SEND_NACK :
+				SEND_ACK :
 					begin
+						byte_io_complete <= 1;
 						if(i2c_clock_counter == i2c_half_low_time_count) begin
 							// bring clock high
 							scl_en <= 1;
@@ -310,7 +342,10 @@ module i2c_controller(
 							if(i2c_state == SEND_ACK) begin
 								// if acked, we get another byte from the device
 								bit_addr <= 7;
+								
 								i2c_state <= RECEIVE_BYTE;
+								
+								sda_en <= 1;
 							end
 							else begin
 								// else we send stop bit on the line
@@ -320,8 +355,52 @@ module i2c_controller(
 								scl_en <= 0;
 							end
 						end
-						else
+						else begin
 							i2c_clock_counter <= i2c_clock_counter + 1;
+						end
+					end
+				
+				SEND_NACK :
+					begin
+						byte_io_complete <= 1;
+						if(i2c_clock_counter == i2c_half_low_time_count) begin
+							// bring clock high
+							scl_en <= 1;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_high_time_count) begin
+							// then bring clock low
+							scl_en <= 0;
+							
+							i2c_clock_counter <= i2c_clock_counter + 1;
+						end
+						else if(i2c_clock_counter == i2c_half_low_and_high_and_half_low_time_count) begin
+							// the ack/nack bit was send perfectly fine
+							
+							// reset clock counter
+							i2c_clock_counter <= 0;
+							
+							// sending ack-nack directly transitions to 
+							if(i2c_state == SEND_ACK) begin
+								// if acked, we get another byte from the device
+								bit_addr <= 7;
+								
+								i2c_state <= RECEIVE_BYTE;
+								
+								sda_en <= 1;
+							end
+							else begin
+								// else we send stop bit on the line
+								i2c_state <= SEND_STOP;
+								
+								sda_en <= 0;
+								scl_en <= 0;
+							end
+						end
+						else begin
+							i2c_clock_counter <= i2c_clock_counter + 1;
+						end
 					end
 					
 				RECEIVE_ACK_NACK :
@@ -359,9 +438,17 @@ module i2c_controller(
 							// reset the counter
 							i2c_clock_counter <= 0;
 							
-							// go to idle state, wait until, we receive 
-							// another byte to send, or to send a stop bit
-							i2c_state <= IDLE;
+							if(slave_R_Wbar && slave_ack_received) begin
+								// go to idle state, wait until, we receive a byte from slave device
+								// if acked, we get another byte from the device
+								bit_addr <= 7;
+								
+								i2c_state <= RECEIVE_BYTE;
+							end
+							else begin
+								// or we receive another byte to send, or to send a stop bit
+								i2c_state <= IDLE;
+							end
 						end
 						else
 							i2c_clock_counter <= i2c_clock_counter + 1;
