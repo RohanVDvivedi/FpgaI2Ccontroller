@@ -1,23 +1,5 @@
-`timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    16:09:07 05/23/2020 
-// Design Name: 
-// Module Name:    main 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+
+// The given main module, queries accelerometer data and gyroscope data, over i2c and 
 module main(
     );
 

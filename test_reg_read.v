@@ -17,26 +17,24 @@ module test_reg_read;
 
 	// Outputs
 	wire [7:0] data_out;
-	wire byte_io_complete;
 	wire slave_ack_received;
 	wire slave_nack_received;
 	wire communication_ongoing;
 	wire controller_idle;
-	wire [2:0] i2c_state;
-	
-	wire [31:0] i2c_clock_counter;
 
 	// Bidirs
 	wire i2c_sda;
 	wire i2c_scl;
 	
-	defparam uut.i2c_high_time = 4;
-	defparam uut.i2c_low_time = 4;
+	defparam uut.i2c_high_time = 2;
+	defparam uut.i2c_low_time = 2;
 
 	// Instantiate the Unit Under Test (UUT)
 	i2c_controller uut (
 		.reset(reset), 
 		.clk(clk), 
+		.i2c_sda(i2c_sda), 
+		.i2c_scl(i2c_scl), 
 		.addr_in(addr_in), 
 		.R_Wbar(R_Wbar), 
 		.send_start(send_start), 
@@ -47,15 +45,10 @@ module test_reg_read;
 		.send_ack(send_ack), 
 		.send_nack(send_nack), 
 		.send_stop(send_stop), 
-		.i2c_sda(i2c_sda), 
-		.i2c_scl(i2c_scl), 
-		.byte_io_complete(byte_io_complete), 
 		.slave_ack_received(slave_ack_received), 
 		.slave_nack_received(slave_nack_received), 
 		.communication_ongoing(communication_ongoing), 
-		.controller_idle(controller_idle),
-		.i2c_clock_counter(i2c_clock_counter),
-		.i2c_state(i2c_state)
+		.controller_idle(controller_idle)
 	);
 	
 	integer r_bytes;

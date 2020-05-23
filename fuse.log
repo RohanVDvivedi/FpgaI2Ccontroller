@@ -8,15 +8,15 @@ Analyzing Verilog file "/home/rohan/Desktop/FpgaI2Ccontroller/test_reg_read.v" i
 Analyzing Verilog file "/opt/Xilinx/14.7/ISE_DS/ISE//verilog/src/glbl.v" into library work
 Starting static elaboration
 Completed static elaboration
-Fuse Memory Usage: 103060 KB
-Fuse CPU Usage: 2200 ms
-Compiling module i2c_controller(i2c_high_time=4,i...
+Fuse Memory Usage: 103056 KB
+Fuse CPU Usage: 1990 ms
+Compiling module i2c_controller(i2c_high_time=2,i...
 Compiling module test_reg_read
 Compiling module glbl
 Time Resolution for simulation is 1ps.
 Waiting for 1 sub-compilation(s) to finish...
 Compiled 3 Verilog Units
 Built simulation executable /home/rohan/Desktop/FpgaI2Ccontroller/test_reg_read_isim_beh.exe
-Fuse Memory Usage: 663740 KB
-Fuse CPU Usage: 2220 ms
-GCC CPU Usage: 770 ms
+Fuse Memory Usage: 663708 KB
+Fuse CPU Usage: 2020 ms
+GCC CPU Usage: 790 ms

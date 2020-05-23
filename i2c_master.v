@@ -5,6 +5,10 @@ module i2c_controller(
 		input reset,					// reset signal for the module
 		input clk,						// clk of the device
 		
+		// connect the following i2c lines to the slave device
+		inout i2c_sda,
+		inout i2c_scl,
+		
 		// set appropriate addr and R/Wbar value, and send_start to start communication
 		input [6:0] addr_in,
 		input R_Wbar,
@@ -23,13 +27,6 @@ module i2c_controller(
 		input send_nack,
 		input send_stop,
 		
-		// connect the following i2c lines to the slave device
-		inout i2c_sda,
-		inout i2c_scl,
-		
-		// data_in, write_enable and the data_out, read_enable can be probed only when the byte_io_complete is set
-		output reg byte_io_complete,
-		
 		// once the  byte_io_complete is set, 
 		// in transmitter mode, if slave ack is received this bit will be also set
 		// while in receiver mode you can set send_ack or send_nack 
@@ -39,10 +36,7 @@ module i2c_controller(
 		// if the module has an on going connection with an i2c slave device
 		output reg communication_ongoing,
 		
-		output reg controller_idle,
-		
-		output reg [31:0] i2c_clock_counter,
-		output reg [2:0] i2c_state
+		output controller_idle
     );
 	
 	reg [6:0] slave_addr;
@@ -58,6 +52,8 @@ module i2c_controller(
 	
 	assign i2c_sda = sda_en ? 1'bz : 0;
 	assign i2c_scl = scl_en ? 1'bz : 0;
+	
+	assign controller_idle = ((reset == 0) && (i2c_state == IDLE)) ? 1 : 0;
 	
 	parameter sys_clk = 50000000;
 	parameter i2c_frequency = 400 * 1000;
@@ -78,7 +74,7 @@ module i2c_controller(
 	parameter i2c_half_low_and_high_time_count =  i2c_half_low_time + i2c_high_time - 1;
 	parameter i2c_half_low_and_high_and_half_low_time_count = i2c_low_time + i2c_high_time - 1;
 	
-	//reg [2:0] i2c_state;
+	reg [2:0] i2c_state;
 	
 	parameter IDLE						= 3'b000;
 	parameter START					= 3'b001;
@@ -89,7 +85,7 @@ module i2c_controller(
 	parameter RECEIVE_ACK_NACK		= 3'b110;
 	parameter SEND_STOP				= 3'b111;
 	
-	//integer i2c_clock_counter;
+	integer i2c_clock_counter;
 	
 	always@(posedge clk) begin
 		if(reset) begin
@@ -100,7 +96,6 @@ module i2c_controller(
 			communication_ongoing <= 0;
 			slave_ack_received <= 0;
 			slave_nack_received <= 0;
-			controller_idle <= 1;
 		end
 		else begin
 			case(i2c_state)
@@ -108,8 +103,6 @@ module i2c_controller(
 				IDLE : 
 					begin
 						if(send_start) begin
-							controller_idle <= 0;
-								
 							// for a start condition to bigin, sda and scl must both be high
 							sda_en <= 1;
 							scl_en <= 1;
@@ -134,8 +127,6 @@ module i2c_controller(
 						end
 						else if(communication_ongoing) begin
 							if(send_stop && !send_ack && !send_nack) begin
-								controller_idle <= 0;
-								
 								// reset counter
 								i2c_clock_counter <= 0;
 								
@@ -148,8 +139,6 @@ module i2c_controller(
 							end
 							// you may send ack or nack only if you are receiving from the i2c slave device
 							else if(!send_stop && send_ack && !send_nack && slave_R_Wbar) begin
-								controller_idle <= 0;
-								
 								// reset counter
 								i2c_clock_counter <= 0;
 								
@@ -157,12 +146,8 @@ module i2c_controller(
 								i2c_state <= SEND_ACK;
 								
 								sda_en <= 0;
-								
-								byte_io_complete <= 0;
 							end
 							else if(!send_stop && !send_ack && send_nack && slave_R_Wbar) begin
-								controller_idle <= 0;
-								
 								// reset counter
 								i2c_clock_counter <= 0;
 								
@@ -172,8 +157,6 @@ module i2c_controller(
 								sda_en <= 1;
 							end
 							else if(write_enable && !slave_R_Wbar) begin
-								controller_idle <= 0;
-								
 								// reset the i2c clock counter
 								i2c_clock_counter <= 0;
 								
@@ -187,8 +170,6 @@ module i2c_controller(
 								scl_en <= 0;
 							end
 							else if(read_enable && slave_R_Wbar) begin
-								controller_idle <= 1;
-								
 								// reset the i2c clock counter
 								i2c_clock_counter <= 0;
 								
@@ -196,12 +177,6 @@ module i2c_controller(
 								slave_ack_received <= 0;
 								slave_nack_received <= 0;
 							end
-							else begin
-								controller_idle <= 1;
-							end
-						end
-						else begin
-							controller_idle <= 1;
 						end
 					end
 
@@ -319,7 +294,6 @@ module i2c_controller(
 					
 				SEND_ACK :
 					begin
-						byte_io_complete <= 1;
 						if(i2c_clock_counter == i2c_half_low_time_count) begin
 							// bring clock high
 							scl_en <= 1;
@@ -362,7 +336,6 @@ module i2c_controller(
 				
 				SEND_NACK :
 					begin
-						byte_io_complete <= 1;
 						if(i2c_clock_counter == i2c_half_low_time_count) begin
 							// bring clock high
 							scl_en <= 1;
