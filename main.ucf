@@ -1,0 +1,22 @@
+//sw2
+NET "start_bar"	 					LOC = T8 	| IOSTANDARD = LVTTL;
+//sw3
+NET "reset_bar"						LOC = R7 	| IOSTANDARD = LVTTL;
+//d1
+NET "indicate_ack_received_bar"	LOC = T9 	| IOSTANDARD = LVTTL;
+//d3
+NET "indicate_nack_received_bar"	LOC = R9 	| IOSTANDARD = LVTTL;
+//clk
+NET "clk"								LOC = A10	| IOSTANDARD = LVTTL;
+
+NET "i2c_scl"							LOC = E12	| IOSTANDARD = LVTTL;
+NET "i2c_sda"							LOC = E13	| IOSTANDARD = LVTTL;
+
+NET "display[0]"						LOC = C15	| IOSTANDARD = LVTTL;
+NET "display[1]"						LOC = D14	| IOSTANDARD = LVTTL;
+NET "display[2]"						LOC = E15	| IOSTANDARD = LVTTL;
+NET "display[3]"						LOC = F15	| IOSTANDARD = LVTTL;
+NET "display[4]"						LOC = G11	| IOSTANDARD = LVTTL;
+NET "display[5]"						LOC = F14	| IOSTANDARD = LVTTL;
+NET "display[6]"						LOC = G16	| IOSTANDARD = LVTTL;
+NET "display[7]"						LOC = H15	| IOSTANDARD = LVTTL;
