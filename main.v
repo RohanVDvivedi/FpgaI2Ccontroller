@@ -108,8 +108,10 @@ module main(
 						else if(step_counter == 1) begin
 							if(ack_received) begin
 								indicate_ack_received <= 1;
+								indicate_nack_received <= 0;
 							end
 							else if(nack_received) begin
+								indicate_ack_received <= 0;
 								indicate_nack_received <= 1;
 							end
 							send_stop <= 1;
@@ -119,7 +121,6 @@ module main(
 						else if(step_counter == 2) begin
 							if(ack_received) begin
 								dev_state <= SETUP_DEVICE;
-								display <= device_addr;
 							end
 							else if(device_addr == 7'h7f) begin
 								dev_state <= HALT;
@@ -250,6 +251,7 @@ module main(
 						else if(step_counter == 4) begin
 							mpu_data[bytes_read] <= data_out;
 							bytes_read <= bytes_read + 1;
+							read_enable <= 0;
 							if(bytes_read == 13) begin
 								send_nack <= 1;
 								step_counter <= step_counter + 1;
@@ -285,7 +287,7 @@ module main(
 				end
 				
 				WAIT_1_SEC : begin
-					if(step_counter == 50000000) begin
+					if(step_counter == 5000000) begin
 						dev_state <= READ_SENSOR_DATA;
 						step_counter <= 0;
 					end
@@ -305,19 +307,28 @@ module main(
 	assign acclz = {mpu_data[4],mpu_data[5]};
 	
 	wire[15:0] pos_acclz;
-	assign pos_acclz = (acclz < 0) ? -acclz : acclz;
+	assign pos_acclz = (acclz[15]) ? ((~acclz) + 1) : acclz;
 	
-	wire[7:0] pos_acclz_8;
-	assign pos_acclz_8 = pos_acclz[14:7];
+	wire[2:0] pos_acclz_3;
+	assign pos_acclz_3 = pos_acclz[14:12];
 	
-	/*always@(posedge clk) begin
+	always@(posedge clk) begin
 		if(reset) begin
 			display <= 0;
 		end
 		else if(send_stop) begin
-			display <= mpu_data[5];
+			case(pos_acclz_3)
+				3'b000 : display <= 8'b00000001;
+				3'b001 : display <= 8'b00000011;
+				3'b010 : display <= 8'b00000111;
+				3'b011 : display <= 8'b00001111;
+				3'b100 : display <= 8'b00011111;
+				3'b101 : display <= 8'b00111111;
+				3'b110 : display <= 8'b01111111;
+				3'b111 : display <= 8'b11111111;
+			endcase
 		end
-	end*/
+	end
 	
 	i2c_controller i2c_controller (
 						reset, clk, 
