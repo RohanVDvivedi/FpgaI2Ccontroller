@@ -59,6 +59,8 @@ module main(
 	 reg [7:0] bytes_read;
 	 
 	integer step_counter;
+	
+	reg signalled;
 
 	always@(posedge clk) begin
 		if(reset) begin
@@ -81,6 +83,8 @@ module main(
 			
 			indicate_ack_received <= 0;
 			indicate_nack_received <= 0;
+			
+			signalled <= 0;
 		end
 		else begin
 			case (dev_state)
@@ -89,14 +93,16 @@ module main(
 					if(start) begin
 						step_counter <= 0;
 						dev_state <= DETECT_DEVICE;
+						signalled <= 0;
 					end
 				end
 				
 				DETECT_DEVICE : begin
-					if(controller_idle) begin
+					if(controller_idle && !signalled) begin
 						if(step_counter == 0) begin
 							R_Wbar <= 0;
 							send_start <= 1;
+							signalled <= 1;
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 1) begin
@@ -107,6 +113,7 @@ module main(
 								indicate_nack_received <= 1;
 							end
 							send_stop <= 1;
+							signalled <= 1;
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 2) begin
@@ -126,14 +133,16 @@ module main(
 					else begin
 						send_start <= 0;
 						send_stop <= 0;
+						signalled <= 0;
 					end
 				end
 				
 				SETUP_DEVICE : begin
-					if(controller_idle) begin
+					if(controller_idle && !signalled) begin
 						if(step_counter == 0) begin
 							R_Wbar <= 0;
 							send_start <= 1;
+							signalled <= 1;
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 1) begin
@@ -141,11 +150,11 @@ module main(
 								indicate_ack_received <= 1;
 								data_in <= 8'h6b;
 								write_enable <= 1;
+								signalled <= 1;
 								step_counter <= step_counter + 1;
 							end
 							else if(nack_received) begin
 								dev_state <= HALT;
-								display <= 8'h94;
 								indicate_nack_received <= 1;
 							end
 						end
@@ -154,11 +163,11 @@ module main(
 								indicate_ack_received <= 1;
 								data_in <= 8'h00;
 								write_enable <= 1;
+								signalled <= 1;
 								step_counter <= step_counter + 1;
 							end
 							else if(nack_received) begin
 								dev_state <= HALT;
-								display <= 8'h85;
 								indicate_nack_received <= 1;
 							end
 						end
@@ -166,19 +175,17 @@ module main(
 							if(ack_received) begin
 								indicate_ack_received <= 1;
 								send_stop <= 1;
+								signalled <= 1;
 								step_counter <= step_counter + 1;
 							end
 							else if(nack_received) begin
 								dev_state <= HALT;
-								display <= 8'h95;
 								indicate_nack_received <= 1;
 							end
 						end
-						else if(step_counter == 3) begin
+						else if(step_counter == 4) begin
 							step_counter <= 0;
-							dev_state <= HALT;
-							display <= 8'h95;
-							//dev_state <= READ_SENSOR_DATA;
+							dev_state <= READ_SENSOR_DATA;
 						end
 						else begin
 							step_counter <= 0;
@@ -188,14 +195,16 @@ module main(
 						send_start <= 0;
 						write_enable <= 0;
 						send_stop <= 0;
+						signalled <= 0;
 					end
 				end
 				
 				READ_SENSOR_DATA : begin
-					if(controller_idle) begin
+					if(controller_idle && !signalled) begin
 						if(step_counter == 0) begin
 							R_Wbar <= 0;
 							send_start <= 1;
+							signalled <= 1;
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 1) begin
@@ -203,6 +212,7 @@ module main(
 								indicate_ack_received <= 1;
 								data_in <= 8'h3b;
 								write_enable <= 1;
+								signalled <= 1;
 								step_counter <= step_counter + 1;
 							end
 							else if(nack_received) begin
@@ -216,6 +226,7 @@ module main(
 								R_Wbar <= 1;
 								send_start <= 1;
 								bytes_read <= 0;
+								signalled <= 1;
 								step_counter <= step_counter + 1;
 							end
 							else if(nack_received) begin
@@ -247,9 +258,11 @@ module main(
 								send_ack <= 1;
 								step_counter <= 3;		
 							end
+							signalled <= 1;
 						end
 						else if(step_counter == 5) begin
 							send_stop <= 1;
+							signalled <= 1;
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 6) begin
@@ -267,6 +280,7 @@ module main(
 						send_ack <= 0;
 						send_nack <= 0;
 						send_stop <= 0;
+						signalled <= 0;
 					end
 				end
 				

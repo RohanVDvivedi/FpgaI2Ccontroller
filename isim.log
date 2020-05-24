@@ -1,5 +1,5 @@
 ISim log file
-Running: /home/rohan/Desktop/FpgaI2Ccontroller/test_reg_read_isim_beh.exe -intstyle ise -gui -tclbatch isim.cmd -wdb /home/rohan/Desktop/FpgaI2Ccontroller/test_reg_read_isim_beh.wdb 
+Running: /home/rohan/Desktop/FpgaI2Ccontroller/test_main_isim_beh.exe -intstyle ise -gui -tclbatch isim.cmd -wdb /home/rohan/Desktop/FpgaI2Ccontroller/test_main_isim_beh.wdb 
 ISim P.20131013 (signature 0xfbc00daa)
 WARNING: A WEBPACK license was found.
 WARNING: Please use Xilinx License Configuration Manager to check out a full ISim license.
@@ -8,7 +8,7 @@ This is a Lite version of ISim.
 Time resolution is 1 ps
 # onerror resume
 # wave add /
-# run 1000 ns
+# run 50000000 ns
 Simulator is doing circuit initialization process.
 Finished circuit initialization process.
 # exit 0
