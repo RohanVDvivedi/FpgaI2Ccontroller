@@ -23,7 +23,7 @@ module main(
 	 reg indicate_nack_received;
 	 assign indicate_nack_received_bar = ~indicate_nack_received;
 	 
-	 reg dev_state;
+	 reg [3:0]dev_state;
 	 
 	 reg [6:0]device_addr;
 	 reg R_Wbar;
@@ -39,25 +39,23 @@ module main(
 	 wire communication_ongoing;
 	 wire controller_idle;
 	 
-	 reg data_in;
+	 reg [7:0] data_in;
 	 reg write_enable;
 	 
-	 wire data_out;
+	 wire [7:0] data_out;
 	 reg read_enable;
 	 
 	 localparam I2C_CONT_RESET 		= 0;
 	 localparam DETECT_DEVICE 			= 1;
-	 localparam SEND_POWER_REG_ADDR 	= 2;
-	 localparam WRITE_POWER_REGISTER = 3;
-	 localparam SEND_DATA_REG_ADDR 	= 4;
-	 localparam READ_DATA_REGISTERS 	= 5;
-	 
-	 localparam HALT = 6;
+	 localparam SETUP_DEVICE			= 2;
+	 localparam READ_SENSOR_DATA 		= 3;
+	 localparam WAIT_1_SEC 				= 4;
+	 localparam HALT						= 5;
 	 
 	 reg [7:0] SETUP_ADDR;
 	 reg [7:0] mpu_data_addr;
-	 // gyrox, gyroy, gyroz, acclx, accly, acclz
-	 reg [15:0] mpu_data [0:5];
+	 // acclx, accly, acclz, temp, gyrox, gyroy, gyroz
+	 reg [7:0] mpu_data [0:13];
 	 reg [7:0] bytes_read;
 	 
 	integer step_counter;
@@ -83,8 +81,6 @@ module main(
 			
 			indicate_ack_received <= 0;
 			indicate_nack_received <= 0;
-			
-			display <= 0;
 		end
 		else begin
 			case (dev_state)
@@ -101,7 +97,6 @@ module main(
 						if(step_counter == 0) begin
 							R_Wbar <= 0;
 							send_start <= 1;
-							display <= device_addr;
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 1) begin
@@ -115,7 +110,11 @@ module main(
 							step_counter <= step_counter + 1;
 						end
 						else if(step_counter == 2) begin
-							if(ack_received || device_addr == 7'h7f) begin
+							if(ack_received) begin
+								dev_state <= SETUP_DEVICE;
+								display <= device_addr;
+							end
+							else if(device_addr == 7'h7f) begin
 								dev_state <= HALT;
 							end
 							else begin
@@ -130,16 +129,155 @@ module main(
 					end
 				end
 				
-				SEND_POWER_REG_ADDR : begin
+				SETUP_DEVICE : begin
+					if(controller_idle) begin
+						if(step_counter == 0) begin
+							R_Wbar <= 0;
+							send_start <= 1;
+							step_counter <= step_counter + 1;
+						end
+						else if(step_counter == 1) begin
+							if(ack_received) begin
+								indicate_ack_received <= 1;
+								data_in <= 8'h6b;
+								write_enable <= 1;
+								step_counter <= step_counter + 1;
+							end
+							else if(nack_received) begin
+								dev_state <= HALT;
+								display <= 8'h94;
+								indicate_nack_received <= 1;
+							end
+						end
+						else if(step_counter == 2) begin
+							if(ack_received) begin
+								indicate_ack_received <= 1;
+								data_in <= 8'h00;
+								write_enable <= 1;
+								step_counter <= step_counter + 1;
+							end
+							else if(nack_received) begin
+								dev_state <= HALT;
+								display <= 8'h85;
+								indicate_nack_received <= 1;
+							end
+						end
+						else if(step_counter == 3) begin
+							if(ack_received) begin
+								indicate_ack_received <= 1;
+								send_stop <= 1;
+								step_counter <= step_counter + 1;
+							end
+							else if(nack_received) begin
+								dev_state <= HALT;
+								display <= 8'h95;
+								indicate_nack_received <= 1;
+							end
+						end
+						else if(step_counter == 3) begin
+							step_counter <= 0;
+							dev_state <= HALT;
+							display <= 8'h95;
+							//dev_state <= READ_SENSOR_DATA;
+						end
+						else begin
+							step_counter <= 0;
+						end
+					end
+					else begin
+						send_start <= 0;
+						write_enable <= 0;
+						send_stop <= 0;
+					end
 				end
 				
-				WRITE_POWER_REGISTER : begin
+				READ_SENSOR_DATA : begin
+					if(controller_idle) begin
+						if(step_counter == 0) begin
+							R_Wbar <= 0;
+							send_start <= 1;
+							step_counter <= step_counter + 1;
+						end
+						else if(step_counter == 1) begin
+							if(ack_received) begin
+								indicate_ack_received <= 1;
+								data_in <= 8'h3b;
+								write_enable <= 1;
+								step_counter <= step_counter + 1;
+							end
+							else if(nack_received) begin
+								dev_state <= HALT;
+								indicate_nack_received <= 1;
+							end
+						end
+						else if(step_counter == 2) begin
+							if(ack_received) begin
+								indicate_ack_received <= 1;
+								R_Wbar <= 1;
+								send_start <= 1;
+								bytes_read <= 0;
+								step_counter <= step_counter + 1;
+							end
+							else if(nack_received) begin
+								dev_state <= HALT;
+								indicate_nack_received <= 1;
+							end
+						end
+						else if(step_counter == 3) begin
+							if(bytes_read == 0 && nack_received) begin
+								dev_state <= HALT;
+								indicate_nack_received <= 1;
+							end
+							else begin
+								if(bytes_read == 0) begin
+									indicate_ack_received <= 1;
+								end
+								read_enable <= 1;
+								step_counter <= step_counter + 1;
+							end
+						end
+						else if(step_counter == 4) begin
+							mpu_data[bytes_read] <= data_out;
+							bytes_read <= bytes_read + 1;
+							if(bytes_read == 13) begin
+								send_nack <= 1;
+								step_counter <= step_counter + 1;
+							end
+							else begin
+								send_ack <= 1;
+								step_counter <= 3;		
+							end
+						end
+						else if(step_counter == 5) begin
+							send_stop <= 1;
+							step_counter <= step_counter + 1;
+						end
+						else if(step_counter == 6) begin
+							step_counter <= 0;
+							dev_state <= WAIT_1_SEC;
+						end
+						else begin
+							step_counter <= 0;
+						end
+					end
+					else begin
+						send_start <= 0;
+						write_enable <= 0;
+						read_enable <= 0;
+						send_ack <= 0;
+						send_nack <= 0;
+						send_stop <= 0;
+					end
 				end
 				
-				SEND_DATA_REG_ADDR : begin
-				end
-				
-				READ_DATA_REGISTERS : begin
+				WAIT_1_SEC : begin
+					if(step_counter == 50000000) begin
+						dev_state <= READ_SENSOR_DATA;
+						step_counter <= 0;
+					end
+					else begin
+						step_counter <= step_counter + 1;
+					end
 				end
 				
 				HALT : begin
@@ -149,6 +287,23 @@ module main(
 		end
 	end
 	
+	wire[15:0] acclz;
+	assign acclz = {mpu_data[4],mpu_data[5]};
+	
+	wire[15:0] pos_acclz;
+	assign pos_acclz = (acclz < 0) ? -acclz : acclz;
+	
+	wire[7:0] pos_acclz_8;
+	assign pos_acclz_8 = pos_acclz[14:7];
+	
+	/*always@(posedge clk) begin
+		if(reset) begin
+			display <= 0;
+		end
+		else if(send_stop) begin
+			display <= mpu_data[5];
+		end
+	end*/
 	
 	i2c_controller i2c_controller (
 						reset, clk, 

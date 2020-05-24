@@ -50,8 +50,8 @@ module i2c_controller(
 	reg sda_en;
 	reg scl_en;
 	
-	assign i2c_sda = sda_en ? 1'bz : 0;
-	assign i2c_scl = scl_en ? 1'bz : 0;
+	assign i2c_sda = sda_en ? 1'bz : 1'b0;
+	assign i2c_scl = scl_en ? 1'bz : 1'b0;
 	
 	parameter sys_clk = 50000000;
 	parameter i2c_frequency = 400 * 1000;
@@ -81,7 +81,7 @@ module i2c_controller(
 	localparam SEND_NACK				= 3'b101;
 	localparam RECEIVE_ACK_NACK	= 3'b110;
 	localparam SEND_STOP				= 3'b111;
-	assign controller_idle = ((reset == 0) && (i2c_state == IDLE)) ? 1 : 0;
+	assign controller_idle = ((reset == 0) && (i2c_state == IDLE)) ? 1'b1 : 1'b0;
 	
 	integer i2c_clock_counter;
 	
